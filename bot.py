@@ -88,17 +88,6 @@ def main():
 
 
 
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        log.info("Bot dihentikan.")
-        sys.exit(0)
-    except Exception as e:
-        log.critical(f"Bot crash fatal: {e}", exc_info=True)
-        sys.exit(1)
-
-
 def _process_symbol(
     symbol: str,
     fetcher: "DataFetcher",
@@ -147,3 +136,15 @@ def _process_symbol(
     success = notifier.send_signal(signal, ai_commentary=ai_commentary)
     if not success:
         log.warning(f"[{symbol}] Gagal mengirim sinyal ke Telegram")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        log.info("Bot dihentikan.")
+        sys.exit(0)
+    except Exception as e:
+        log.critical(f"Bot crash fatal: {e}", exc_info=True)
+        sys.exit(1)
+
