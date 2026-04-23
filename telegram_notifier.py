@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from config import Config
 
 log = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class TelegramNotifier:
         div_emoji  = EMOJI.get(s["divergence"], "")
         zone_emoji = EMOJI.get(s["fib_zone"], "")
         zone_label = FIB_ZONE_LABEL.get(s["fib_zone"], s["fib_zone"])
-        now        = datetime.utcnow().strftime("%d %b %Y %H:%M UTC")
+        now        = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
 
         # Tentukan leverage saran berdasarkan RR (semakin tinggi RR semakin konservatif)
         suggested_lev = 5 if s["rr_ratio"] < 2 else (3 if s["rr_ratio"] < 3 else 2)

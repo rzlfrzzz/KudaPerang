@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from config import Config
 from data_fetcher import DataFetcher
 from indicators import Indicators
@@ -51,6 +51,9 @@ def main():
         top_n=Config.SYMBOLS_TOP_N,
         refresh_interval_hours=Config.SYMBOLS_REFRESH_HOURS,
         blacklist=Config.SYMBOLS_BLACKLIST,
+        min_volume_usd=Config.SYMBOLS_MIN_VOLUME_USD,
+        min_oi_usd=Config.SYMBOLS_MIN_OI_USD,
+        new_listing_days=Config.SYMBOLS_NEW_LISTING_DAYS,
     )
 
     # Track last candle close timestamp per symbol agar tidak kirim sinyal duplikat
@@ -59,7 +62,7 @@ def main():
     while True:
         try:
             cycle_start = time.time()
-            now_str = datetime.utcnow().strftime("%H:%M:%S UTC")
+            now_str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
             log.info(f"── Scan cycle {now_str} ──")
 
             symbols = symbol_mgr.symbols

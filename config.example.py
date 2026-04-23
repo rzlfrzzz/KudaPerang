@@ -24,11 +24,21 @@ class Config:
         "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "POLUSDT",
     ]
 
-    # Jumlah pair teratas yang dipantau
-    SYMBOLS_TOP_N = 10
+    # Jumlah pair teratas yang dipantau (setelah semua filter diterapkan)
+    SYMBOLS_TOP_N = 20
 
-    # Interval refresh symbols dalam JAM — pilih 6 atau 12
-    SYMBOLS_REFRESH_HOURS = 6
+    # Interval refresh symbols dalam JAM
+    SYMBOLS_REFRESH_HOURS = 1
+
+    # ── Filter Kualitas Symbol ────────────────────────────────────────────────
+    # Volume 24 jam minimum dalam USD — saring pair dengan likuiditas rendah
+    SYMBOLS_MIN_VOLUME_USD = 50_000_000   # $50 juta
+
+    # Open Interest minimum dalam USD — depth pasar nyata (interest institusional)
+    SYMBOLS_MIN_OI_USD = 20_000_000       # $20 juta
+
+    # Exclude pair yang baru listing kurang dari N hari — hindari volume artifisial
+    SYMBOLS_NEW_LISTING_DAYS = 7
 
     # Pair yang SELALU dikecualikan dari daftar
     SYMBOLS_BLACKLIST = [
