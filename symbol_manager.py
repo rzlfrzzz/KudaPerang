@@ -12,6 +12,7 @@ from __future__ import annotations
 import time
 import logging
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from config import Config
@@ -243,59 +244,63 @@ class SymbolManager:
 
     def _filter_by_oi(self, candidates: list[dict]) -> list[dict]:
         """
-        Fetch OI per-symbol untuk setiap kandidat dan filter OI ≥ min_oi_usd.
-        Harga diambil dari field last_price yang sudah ada di candidates (Tahap 1)
-        sehingga tidak perlu request tambahan ke premiumIndex.
-        Sleep 0.15s per request ≈ 6-7 req/s — aman untuk Binance weight limit.
+        Fetch OI secara concurrent (max 5 thread) lalu filter OI ≥ min_oi_usd.
+        Tidak ada blocking sleep di main thread — tiap thread jeda 0.1s sendiri.
 
         Fallback policy: pair yang gagal di-fetch OI hanya diloloskan jika
-        jumlah error < 30% dari total kandidat (intermittent). Jika mayoritas
-        gagal (misal maintenance Binance), pair tersebut di-skip bukan di-loloskan.
+        jumlah error < 30% dari total kandidat (intermittent).
         """
-        passed       = []
-        error_count  = 0
-        error_limit  = max(1, int(len(candidates) * 0.30))  # toleransi 30%
+        error_limit = max(1, int(len(candidates) * 0.30))
+        results: list[tuple[dict, float | None]] = []   # (candidate, oi_usd | None)
 
-        for c in candidates:
-            sym = c["symbol"]
-            try:
-                resp = requests.get(
-                    f"{self.base_url}{_EP_OI}",
-                    params={"symbol": sym},
-                    timeout=5,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                oi_contracts = float(data.get("openInterest", 0))
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(self._fetch_oi_single, c): c for c in candidates}
+            for future in as_completed(futures):
+                c = futures[future]
+                try:
+                    oi_usd = future.result()
+                    results.append((c, oi_usd))
+                except Exception as e:
+                    logger.warning(f"[SymbolManager] Thread OI error untuk {c['symbol']}: {e}")
+                    results.append((c, None))
 
-                # Gunakan lastPrice dari ticker Tahap 1 — tidak perlu request tambahan
-                price  = c.get("last_price", 1.0)
-                oi_usd = oi_contracts * price
-
-                if oi_usd >= self.min_oi_usd:
-                    c["oi_usd"] = oi_usd
-                    passed.append(c)
-                else:
-                    logger.debug(
-                        f"[SymbolManager] Exclude {sym} — OI ${oi_usd/1e6:.1f}M < ${self.min_oi_usd/1e6:.0f}M"
-                    )
-
-            except requests.RequestException as e:
-                error_count += 1
-                if error_count <= error_limit:
-                    # Error intermittent — loloskan dengan peringatan
-                    logger.warning(f"[SymbolManager] Gagal fetch OI {sym} ({error_count}/{error_limit} toleransi): {e}, dilewati")
-                    passed.append(c)
-                else:
-                    # Terlalu banyak error — kemungkinan Binance bermasalah, skip pair
-                    logger.warning(f"[SymbolManager] Gagal fetch OI {sym} (error>{error_limit}, skip): {e}")
-
-            time.sleep(0.15)   # ~6-7 req/s — aman untuk Binance weight limit
+        passed      = []
+        error_count = sum(1 for _, v in results if v is None)
 
         if error_count > 0:
-            logger.info(f"[SymbolManager] OI fetch selesai: {error_count} error dari {len(candidates)} kandidat")
+            logger.info(f"[SymbolManager] OI fetch: {error_count} error dari {len(candidates)} kandidat")
+
+        for c, oi_usd in results:
+            if oi_usd is None:
+                if error_count <= error_limit:
+                    passed.append(c)   # intermittent — loloskan
+                else:
+                    logger.warning(f"[SymbolManager] Skip {c['symbol']} — OI tidak bisa di-fetch (terlalu banyak error)")
+            elif oi_usd >= self.min_oi_usd:
+                c["oi_usd"] = oi_usd
+                passed.append(c)
+            else:
+                logger.debug(
+                    f"[SymbolManager] Exclude {c['symbol']} — OI ${oi_usd/1e6:.1f}M < ${self.min_oi_usd/1e6:.0f}M"
+                )
 
         return passed
+
+    def _fetch_oi_single(self, c: dict) -> float:
+        """
+        Fetch OI satu symbol dan return nilai OI dalam USD.
+        Dipanggil dari thread pool. Raise exception jika request gagal.
+        """
+        resp = requests.get(
+            f"{self.base_url}{_EP_OI}",
+            params={"symbol": c["symbol"]},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        oi_contracts = float(resp.json().get("openInterest", 0))
+        price        = c.get("last_price", 1.0)
+        time.sleep(0.1)   # jeda kecil per thread agar tidak spike
+        return oi_contracts * price
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

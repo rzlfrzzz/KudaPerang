@@ -12,6 +12,9 @@ from config import Config
 
 log = logging.getLogger(__name__)
 
+# Karakter yang wajib di-escape di MarkdownV2
+_MDV2_CHARS = r"\_*[]()~`>#+-=|{}.!"
+
 # Emoji helper
 EMOJI = {
     "LONG":     "🟢",
@@ -30,20 +33,27 @@ FIB_ZONE_LABEL = {
 }
 
 
+def _esc(text: str) -> str:
+    """Escape semua karakter spesial MarkdownV2 Telegram."""
+    for ch in _MDV2_CHARS:
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
 class TelegramNotifier:
     def __init__(self):
-        self.token   = Config.TELEGRAM_BOT_TOKEN
-        self.chat_id = Config.TELEGRAM_CHAT_ID
+        self.token    = Config.TELEGRAM_BOT_TOKEN
+        self.chat_id  = Config.TELEGRAM_CHAT_ID
         self.base_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
 
     def send_signal(self, signal: dict, ai_commentary: str | None = None) -> bool:
         """Format dan kirim sinyal ke Telegram. Return True jika berhasil."""
         message = self._format_message(signal, ai_commentary=ai_commentary)
-        return self._send(message)
+        return self._send(message, parse_mode="MarkdownV2")
 
     def send_text(self, text: str) -> bool:
-        """Kirim pesan teks biasa (untuk notifikasi bot start/error)."""
-        return self._send(text)
+        """Kirim pesan teks biasa tanpa Markdown (untuk notifikasi startup/error)."""
+        return self._send(text, parse_mode=None)
 
     # ── Formatter ─────────────────────────────────────────────────────────────
     @staticmethod
@@ -51,70 +61,84 @@ class TelegramNotifier:
         dir_emoji  = EMOJI.get(s["direction"], "")
         div_emoji  = EMOJI.get(s["divergence"], "")
         zone_emoji = EMOJI.get(s["fib_zone"], "")
-        zone_label = FIB_ZONE_LABEL.get(s["fib_zone"], s["fib_zone"])
-        now        = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
+        zone_label = _esc(FIB_ZONE_LABEL.get(s["fib_zone"], s["fib_zone"]))
+        now        = _esc(datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC"))
 
-        # Tentukan leverage saran berdasarkan RR (semakin tinggi RR semakin konservatif)
+        direction  = _esc(s["direction"])
+        symbol     = _esc(s["symbol"])
+        htf_bias   = _esc(s["htf_bias"].upper())
+        mtf_bias   = _esc(s["mtf_bias"].upper())
+        divergence = _esc(s["divergence"].upper())
+        rsi        = _esc(str(s["rsi"]))
+        entry      = _esc(str(s["entry"]))
+        stop_loss  = _esc(str(s["stop_loss"]))
+        tp1        = _esc(str(s["tp1"]))
+        tp2        = _esc(str(s["tp2"]))
+        tp3        = _esc(str(s["tp3"]))
+        rr_ratio   = _esc(str(s["rr_ratio"]))
+        swing_high = _esc(str(s["swing_high"]))
+        swing_low  = _esc(str(s["swing_low"]))
+
         suggested_lev = 5 if s["rr_ratio"] < 2 else (3 if s["rr_ratio"] < 3 else 2)
+        rr_stars      = "⭐" * min(int(s["rr_ratio"]), 5)
 
-        rr_stars = "⭐" * min(int(s["rr_ratio"]), 5)
-
-        msg = f"""
-{dir_emoji} *{s["direction"]} SIGNAL — {s["symbol"]}*
-`{now}`
-
-━━━━━━━━━━━━━━━━━━━━━
-📊 *ANALISIS KONFIRMASI*
-━━━━━━━━━━━━━━━━━━━━━
-• HTF (1H) Bias  : {s["htf_bias"].upper()} {div_emoji}
-• MTF (15M) Bias : {s["mtf_bias"].upper()} {div_emoji}
-• RSI Divergence : {s["divergence"].upper()} (RSI: {s["rsi"]})
-• Fib Zone       : {zone_emoji} {zone_label}
-
-━━━━━━━━━━━━━━━━━━━━━
-🎯 *LEVEL TRADING*
-━━━━━━━━━━━━━━━━━━━━━
-• Entry     : `{s["entry"]}`
-• Stop Loss : `{s["stop_loss"]}`  ⛔
-• TP1 (50%) : `{s["tp1"]}`  🏁
-• TP2 (30%) : `{s["tp2"]}`  🏁🏁
-• TP3 (20%) : `{s["tp3"]}`  🏁🏁🏁
-
-━━━━━━━━━━━━━━━━━━━━━
-📐 *RISK MANAGEMENT*
-━━━━━━━━━━━━━━━━━━━━━
-• R:R Ratio     : 1:{s["rr_ratio"]} {rr_stars}
-• Saran Leverage: {suggested_lev}x (maks)
-• Risk per trade: 1–2% kapital
-
-━━━━━━━━━━━━━━━━━━━━━
-🕯️ *SWING REFERENCE*
-━━━━━━━━━━━━━━━━━━━━━
-• Swing High : `{s["swing_high"]}`
-• Swing Low  : `{s["swing_low"]}`
-
-        ⚠️ _Ini sinyal edukasi, bukan rekomendasi finansial._
-_Selalu gunakan risk management yang ketat._
-        """.strip()
+        msg = (
+            f"{dir_emoji} *{direction} SIGNAL — {symbol}*\n"
+            f"`{now}`\n"
+            f"\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 *ANALISIS KONFIRMASI*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• HTF \\(1H\\) Bias  : {htf_bias} {div_emoji}\n"
+            f"• MTF \\(15M\\) Bias : {mtf_bias} {div_emoji}\n"
+            f"• RSI Divergence : {divergence} \\(RSI: {rsi}\\)\n"
+            f"• Fib Zone       : {zone_emoji} {zone_label}\n"
+            f"\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 *LEVEL TRADING*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• Entry     : `{entry}`\n"
+            f"• Stop Loss : `{stop_loss}`  ⛔\n"
+            f"• TP1 \\(50%\\) : `{tp1}`  🏁\n"
+            f"• TP2 \\(30%\\) : `{tp2}`  🏁🏁\n"
+            f"• TP3 \\(20%\\) : `{tp3}`  🏁🏁🏁\n"
+            f"\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📐 *RISK MANAGEMENT*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• R:R Ratio     : 1:{rr_ratio} {rr_stars}\n"
+            f"• Saran Leverage: {suggested_lev}x \\(maks\\)\n"
+            f"• Risk per trade: 1–2% kapital\n"
+            f"\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🕯️ *SWING REFERENCE*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• Swing High : `{swing_high}`\n"
+            f"• Swing Low  : `{swing_low}`\n"
+            f"\n"
+            f"⚠️ _Ini sinyal edukasi, bukan rekomendasi finansial\\._\n"
+            f"_Selalu gunakan risk management yang ketat\\._"
+        )
 
         if ai_commentary:
-            safe_commentary = ai_commentary.replace("_", "\\_").replace("*", "\\*")
+            safe = _esc(ai_commentary)
             msg += (
                 f"\n\n━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🤖 *AI COMMENTARY (DeepSeek)*\n"
+                f"🤖 *AI COMMENTARY \\(DeepSeek\\)*\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"_{safe_commentary}_"
+                f"_{safe}_"
             )
 
         return msg
 
     # ── HTTP sender ───────────────────────────────────────────────────────────
-    def _send(self, text: str) -> bool:
-        payload = {
-            "chat_id":    self.chat_id,
-            "text":       text,
-            "parse_mode": "Markdown",
+    def _send(self, text: str, parse_mode: str | None = "MarkdownV2") -> bool:
+        payload: dict = {
+            "chat_id": self.chat_id,
+            "text":    text,
         }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
         try:
             resp = requests.post(self.base_url, json=payload, timeout=10)
             resp.raise_for_status()
@@ -123,3 +147,4 @@ _Selalu gunakan risk management yang ketat._
         except requests.exceptions.RequestException as e:
             log.error(f"Telegram send failed: {e}")
             return False
+

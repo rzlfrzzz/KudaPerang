@@ -13,10 +13,12 @@ Disclaimer: bukan financial advice, gunakan dengan bijak
 
 from __future__ import annotations
 
+import json
 import time
 import logging
 import sys
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from config import Config
 from data_fetcher import DataFetcher
 from indicators import Indicators
@@ -31,7 +33,12 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("bot.log"),
+        RotatingFileHandler(
+            "bot.log",
+            maxBytes=5 * 1024 * 1024,   # 5 MB per file
+            backupCount=3,              # simpan 3 file lama (total maks ~20 MB)
+            encoding="utf-8",
+        ),
     ],
 )
 log = logging.getLogger(__name__)
@@ -46,6 +53,12 @@ def main():
     fetcher  = DataFetcher()
     notifier = TelegramNotifier()
     analyzer = DeepSeekAnalyzer()
+
+    notifier.send_text(
+        f"\u2705 MTF Signal Bot started\n"
+        f"HTF/MTF/LTF: {Config.HTF}/{Config.MTF}/{Config.LTF}\n"
+        f"Scan interval: {Config.SCAN_INTERVAL}s"
+    )
     symbol_mgr = SymbolManager(
         base_url=Config.BINANCE_BASE_URL,
         top_n=Config.SYMBOLS_TOP_N,
@@ -84,6 +97,10 @@ def main():
         except Exception as e:
             log.error(f"[MAIN LOOP] Unexpected error: {e}", exc_info=True)
             log.info("Restart cycle dalam 60 detik...")
+            try:
+                notifier.send_text(f"\u26a0\ufe0f Bot error, restart dalam 60 detik:\n{e}")
+            except Exception:
+                pass
             time.sleep(60)
 
 
@@ -134,8 +151,20 @@ def _process_symbol(
     # 6. Kirim ke Telegram
     log.info(f"[{symbol}] *** SIGNAL {signal['direction']} *** sending to Telegram")
     success = notifier.send_signal(signal, ai_commentary=ai_commentary)
-    if not success:
+    if success:
+        _append_signal_log(signal)
+    else:
         log.warning(f"[{symbol}] Gagal mengirim sinyal ke Telegram")
+
+
+def _append_signal_log(signal: dict) -> None:
+    """Catat sinyal ke signals.jsonl untuk keperluan evaluasi/backtesting."""
+    try:
+        entry = {**signal, "logged_at": datetime.now(timezone.utc).isoformat()}
+        with open("signals.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError as e:
+        log.warning(f"Gagal menulis signals.jsonl: {e}")
 
 
 if __name__ == "__main__":

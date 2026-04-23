@@ -138,18 +138,16 @@ class SignalEngine:
 
         if direction == "LONG":
             entry     = close
-            sl_buffer = max(swing_low * 0.002, swing_low * 0.005)  # min 0.5%
-            stop_loss = swing_low - sl_buffer
-            tp1       = fib_382                    # TP1: Fibonacci 38.2% dari bawah
-            tp2       = fib_0                      # TP2: Fibonacci 0% (swing high)
-            tp3       = fib_0 + (fib_0 - fib_100) * 0.618  # TP3: 1.618 extension
+            stop_loss = swing_low - (swing_low * 0.005)    # 0.5% di bawah swing low
+            tp1       = fib_382
+            tp2       = fib_0
+            tp3       = fib_0 + (fib_0 - fib_100) * 0.618
         else:  # SHORT
             entry     = close
-            sl_buffer = max(swing_high * 0.002, swing_high * 0.005)  # min 0.5%
-            stop_loss = swing_high + sl_buffer
-            tp1       = fib_618                    # TP1: Fibonacci 61.8% dari atas
-            tp2       = fib_100                    # TP2: Fibonacci 100% (swing low)
-            tp3       = fib_100 - (fib_0 - fib_100) * 0.618  # TP3: 1.618 extension
+            stop_loss = swing_high + (swing_high * 0.005)  # 0.5% di atas swing high
+            tp1       = fib_618
+            tp2       = fib_100
+            tp3       = fib_100 - (fib_0 - fib_100) * 0.618
 
         risk     = abs(entry - stop_loss)
         reward   = abs(tp2 - entry)
