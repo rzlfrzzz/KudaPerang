@@ -98,11 +98,12 @@ _Selalu gunakan risk management yang ketat._
         """.strip()
 
         if ai_commentary:
+            safe_commentary = ai_commentary.replace("_", "\\_").replace("*", "\\*")
             msg += (
                 f"\n\n━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🤖 *AI COMMENTARY (DeepSeek)*\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"_{ai_commentary}_"
+                f"_{safe_commentary}_"
             )
 
         return msg

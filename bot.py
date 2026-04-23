@@ -81,9 +81,6 @@ def main():
             sleep_time = max(0, Config.SCAN_INTERVAL - elapsed)
             log.info(f"Cycle done in {elapsed:.1f}s, sleeping {sleep_time:.0f}s")
             time.sleep(sleep_time)
-        except KeyboardInterrupt:
-            log.info("Bot dihentikan oleh user.")
-            sys.exit(0)
         except Exception as e:
             log.error(f"[MAIN LOOP] Unexpected error: {e}", exc_info=True)
             log.info("Restart cycle dalam 60 detik...")

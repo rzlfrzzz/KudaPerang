@@ -247,8 +247,15 @@ class SymbolManager:
         Harga diambil dari field last_price yang sudah ada di candidates (Tahap 1)
         sehingga tidak perlu request tambahan ke premiumIndex.
         Sleep 0.15s per request ≈ 6-7 req/s — aman untuk Binance weight limit.
+
+        Fallback policy: pair yang gagal di-fetch OI hanya diloloskan jika
+        jumlah error < 30% dari total kandidat (intermittent). Jika mayoritas
+        gagal (misal maintenance Binance), pair tersebut di-skip bukan di-loloskan.
         """
-        passed = []
+        passed       = []
+        error_count  = 0
+        error_limit  = max(1, int(len(candidates) * 0.30))  # toleransi 30%
+
         for c in candidates:
             sym = c["symbol"]
             try:
@@ -274,10 +281,19 @@ class SymbolManager:
                     )
 
             except requests.RequestException as e:
-                logger.warning(f"[SymbolManager] Gagal fetch OI untuk {sym}: {e}, dilewati")
-                passed.append(c)
+                error_count += 1
+                if error_count <= error_limit:
+                    # Error intermittent — loloskan dengan peringatan
+                    logger.warning(f"[SymbolManager] Gagal fetch OI {sym} ({error_count}/{error_limit} toleransi): {e}, dilewati")
+                    passed.append(c)
+                else:
+                    # Terlalu banyak error — kemungkinan Binance bermasalah, skip pair
+                    logger.warning(f"[SymbolManager] Gagal fetch OI {sym} (error>{error_limit}, skip): {e}")
 
             time.sleep(0.15)   # ~6-7 req/s — aman untuk Binance weight limit
+
+        if error_count > 0:
+            logger.info(f"[SymbolManager] OI fetch selesai: {error_count} error dari {len(candidates)} kandidat")
 
         return passed
 

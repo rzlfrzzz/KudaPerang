@@ -83,6 +83,9 @@ class SignalEngine:
             mtf_bias   = mtf_bias,
         )
 
+        if signal is None:
+            return None
+
         log.info(
             f"[{symbol}] ✅ SIGNAL {direction} | "
             f"entry={signal['entry']:.4f} SL={signal['stop_loss']:.4f} "
@@ -121,7 +124,7 @@ class SignalEngine:
     def _build_signal(
         symbol: str, direction: str, df_ltf: pd.DataFrame,
         fib_zone: str, divergence: str, htf_bias: str, mtf_bias: str,
-    ) -> dict:
+    ) -> dict | None:
         last  = df_ltf.iloc[-1]
         close = last["close"]
         rsi   = last["rsi"]
@@ -135,20 +138,28 @@ class SignalEngine:
 
         if direction == "LONG":
             entry     = close
-            stop_loss = swing_low * 0.998          # Sedikit di bawah swing low
+            sl_buffer = max(swing_low * 0.002, swing_low * 0.005)  # min 0.5%
+            stop_loss = swing_low - sl_buffer
             tp1       = fib_382                    # TP1: Fibonacci 38.2% dari bawah
             tp2       = fib_0                      # TP2: Fibonacci 0% (swing high)
             tp3       = fib_0 + (fib_0 - fib_100) * 0.618  # TP3: 1.618 extension
         else:  # SHORT
             entry     = close
-            stop_loss = swing_high * 1.002         # Sedikit di atas swing high
+            sl_buffer = max(swing_high * 0.002, swing_high * 0.005)  # min 0.5%
+            stop_loss = swing_high + sl_buffer
             tp1       = fib_618                    # TP1: Fibonacci 61.8% dari atas
             tp2       = fib_100                    # TP2: Fibonacci 100% (swing low)
             tp3       = fib_100 - (fib_0 - fib_100) * 0.618  # TP3: 1.618 extension
 
-        risk   = abs(entry - stop_loss)
-        reward = abs(tp2 - entry)
+        risk     = abs(entry - stop_loss)
+        reward   = abs(tp2 - entry)
         rr_ratio = reward / risk if risk > 0 else 0
+
+        if rr_ratio < Config.RISK_REWARD_MIN:
+            log.info(
+                f"[{symbol}] RR {rr_ratio:.1f} < minimum {Config.RISK_REWARD_MIN}, skip"
+            )
+            return None
 
         return {
             "symbol":         symbol,
