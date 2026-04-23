@@ -52,9 +52,9 @@ class SymbolManager:
 
         self._symbols: list[str]       = []
         self._last_refresh: float      = 0.0
-        # Cache exchange info (listing dates) — refresh sekali per sesi
+        # Cache listing dates — di-refresh bersamaan dengan watchlist (tiap siklus _refresh)
         self._listing_dates: dict[str, datetime] = {}
-        self._listing_dates_fetched: bool        = False
+        self._listing_dates_last_fetch: float    = 0.0
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -93,6 +93,9 @@ class SymbolManager:
         Hasil akhir: top N pair diurutkan berdasarkan volume descending.
         """
         logger.info("[SymbolManager] Memulai refresh watchlist...")
+
+        # Refresh listing dates setiap siklus agar pair baru terdeteksi
+        self._fetch_listing_dates()
 
         # ── Tahap 1: Volume filter ────────────────────────────────────────────
         candidates = self._fetch_volume_candidates()
@@ -171,7 +174,11 @@ class SymbolManager:
             vol = float(t.get("quoteVolume", 0))
             if vol < self.min_volume_usd:
                 continue
-            result.append({"symbol": sym, "volume": vol})
+            result.append({
+                "symbol": sym,
+                "volume": vol,
+                "last_price": float(t.get("lastPrice") or t.get("markPrice") or 1),
+            })
 
         return result
 
@@ -179,8 +186,8 @@ class SymbolManager:
 
     def _fetch_listing_dates(self) -> None:
         """
-        Fetch exchange info sekali untuk mendapatkan onboardDate setiap pair.
-        Binance menyediakan field 'onboardDate' (ms timestamp) di exchangeInfo.
+        Fetch exchange info untuk mendapatkan onboardDate setiap pair.
+        Dipanggil setiap siklus refresh watchlist agar pair listing baru terdeteksi.
         """
         try:
             resp = requests.get(
@@ -190,24 +197,22 @@ class SymbolManager:
             data = resp.json()
         except requests.RequestException as e:
             logger.error(f"[SymbolManager] Gagal fetch exchangeInfo: {e}")
-            self._listing_dates_fetched = True   # jangan retry terus
             return
 
+        new_dates: dict[str, datetime] = {}
         for s in data.get("symbols", []):
             onboard_ms = s.get("onboardDate")
             if onboard_ms:
-                self._listing_dates[s["symbol"]] = datetime.fromtimestamp(
+                new_dates[s["symbol"]] = datetime.fromtimestamp(
                     onboard_ms / 1000, tz=timezone.utc
                 )
 
-        self._listing_dates_fetched = True
-        logger.info(f"[SymbolManager] Listing dates berhasil di-cache untuk {len(self._listing_dates)} symbol")
+        self._listing_dates = new_dates
+        self._listing_dates_last_fetch = time.time()
+        logger.info(f"[SymbolManager] Listing dates di-refresh untuk {len(new_dates)} symbol")
 
     def _filter_new_listings(self, candidates: list[dict]) -> list[dict]:
         """Exclude pair yang listing-nya kurang dari NEW_LISTING_DAYS hari."""
-        if not self._listing_dates_fetched:
-            self._fetch_listing_dates()
-
         if not self._listing_dates:
             # Tidak bisa fetch exchange info — skip filter ini, jangan block semua
             logger.warning("[SymbolManager] Listing dates tidak tersedia, skip new-listing filter.")
@@ -239,8 +244,9 @@ class SymbolManager:
     def _filter_by_oi(self, candidates: list[dict]) -> list[dict]:
         """
         Fetch OI per-symbol untuk setiap kandidat dan filter OI ≥ min_oi_usd.
-        Binance tidak punya bulk OI endpoint — request dilakukan satu per satu
-        tapi hanya untuk kandidat yang sudah lolos filter sebelumnya (~50-100 pair).
+        Harga diambil dari field last_price yang sudah ada di candidates (Tahap 1)
+        sehingga tidak perlu request tambahan ke premiumIndex.
+        Sleep 0.15s per request ≈ 6-7 req/s — aman untuk Binance weight limit.
         """
         passed = []
         for c in candidates:
@@ -255,9 +261,8 @@ class SymbolManager:
                 data = resp.json()
                 oi_contracts = float(data.get("openInterest", 0))
 
-                # OI dari Binance dalam satuan base asset, kalikan harga untuk dapat USD
-                # Gunakan markPrice dari ticker jika ada, fallback ke 1
-                price = self._get_mark_price(sym)
+                # Gunakan lastPrice dari ticker Tahap 1 — tidak perlu request tambahan
+                price  = c.get("last_price", 1.0)
                 oi_usd = oi_contracts * price
 
                 if oi_usd >= self.min_oi_usd:
@@ -270,25 +275,11 @@ class SymbolManager:
 
             except requests.RequestException as e:
                 logger.warning(f"[SymbolManager] Gagal fetch OI untuk {sym}: {e}, dilewati")
-                # Jika tidak bisa fetch OI, loloskan saja agar tidak block pair bagus
                 passed.append(c)
 
-            time.sleep(0.05)   # jeda kecil agar tidak spam rate limit
+            time.sleep(0.15)   # ~6-7 req/s — aman untuk Binance weight limit
 
         return passed
-
-    def _get_mark_price(self, symbol: str) -> float:
-        """Ambil harga mark terkini untuk konversi OI ke USD. Fallback ke 1 jika gagal."""
-        try:
-            resp = requests.get(
-                f"{self.base_url}/fapi/v1/premiumIndex",
-                params={"symbol": symbol},
-                timeout=5,
-            )
-            resp.raise_for_status()
-            return float(resp.json().get("markPrice", 1))
-        except Exception:
-            return 1.0
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
