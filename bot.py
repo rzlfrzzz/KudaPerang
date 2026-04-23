@@ -51,9 +51,9 @@ def main():
         top_n=Config.SYMBOLS_TOP_N,
         refresh_interval_hours=Config.SYMBOLS_REFRESH_HOURS,
         blacklist=Config.SYMBOLS_BLACKLIST,
-        min_volume_usd=Config.SYMBOLS_MIN_VOLUME_USD,
-        min_oi_usd=Config.SYMBOLS_MIN_OI_USD,
-        new_listing_days=Config.SYMBOLS_NEW_LISTING_DAYS,
+        min_volume_usd=getattr(Config, "SYMBOLS_MIN_VOLUME_USD", 50_000_000),
+        min_oi_usd=getattr(Config, "SYMBOLS_MIN_OI_USD", 20_000_000),
+        new_listing_days=getattr(Config, "SYMBOLS_NEW_LISTING_DAYS", 7),
     )
 
     # Track last candle close timestamp per symbol agar tidak kirim sinyal duplikat
