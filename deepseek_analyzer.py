@@ -8,6 +8,8 @@ Cara kerja:
   - Return string komentar, atau None jika gagal / fitur dinonaktifkan
 """
 
+from __future__ import annotations
+
 import logging
 from openai import OpenAI, APIError, APITimeoutError
 from config import Config

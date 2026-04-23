@@ -3,6 +3,8 @@ data_fetcher.py — Ambil data OHLCV dari Binance Futures REST API
 Tidak butuh API key (public endpoint)
 """
 
+from __future__ import annotations
+
 import logging
 import requests
 import pandas as pd

@@ -3,6 +3,8 @@ symbol_manager.py — Auto-refresh top liquid symbols dari Binance Futures
 Berdasarkan volume 24 jam, diperbarui setiap 6 atau 12 jam secara otomatis.
 """
 
+from __future__ import annotations
+
 import time
 import logging
 import requests

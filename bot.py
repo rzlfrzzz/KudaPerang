@@ -11,8 +11,11 @@ Author  : generated for educational purposes
 Disclaimer: bukan financial advice, gunakan dengan bijak
 """
 
+from __future__ import annotations
+
 import time
 import logging
+import sys
 from datetime import datetime
 from config import Config
 from data_fetcher import DataFetcher
@@ -54,26 +57,46 @@ def main():
     last_signal: dict[str, str] = {}
 
     while True:
-        cycle_start = time.time()
-        now_str = datetime.utcnow().strftime("%H:%M:%S UTC")
-        log.info(f"── Scan cycle {now_str} ──")
+        try:
+            cycle_start = time.time()
+            now_str = datetime.utcnow().strftime("%H:%M:%S UTC")
+            log.info(f"── Scan cycle {now_str} ──")
 
-        symbols = symbol_mgr.symbols
-        log.info(f"Scanning {len(symbols)} pairs | Refresh berikutnya: {symbol_mgr.time_until_next_refresh()}")
+            symbols = symbol_mgr.symbols
+            log.info(f"Scanning {len(symbols)} pairs | Refresh berikutnya: {symbol_mgr.time_until_next_refresh()}")
 
-        for symbol in symbols:
-            try:
-                _process_symbol(symbol, fetcher, notifier, analyzer, last_signal)
-            except Exception as e:
-                log.error(f"[{symbol}] Error: {e}", exc_info=True)
+            for symbol in symbols:
+                try:
+                    _process_symbol(symbol, fetcher, notifier, analyzer, last_signal)
+                except Exception as e:
+                    log.error(f"[{symbol}] Error: {e}", exc_info=True)
 
-            # Jeda antar pair agar tidak spike request
-            time.sleep(Config.REQUEST_DELAY)
+                # Jeda antar pair agar tidak spike request
+                time.sleep(Config.REQUEST_DELAY)
 
-        elapsed = time.time() - cycle_start
-        sleep_time = max(0, Config.SCAN_INTERVAL - elapsed)
-        log.info(f"Cycle done in {elapsed:.1f}s, sleeping {sleep_time:.0f}s")
-        time.sleep(sleep_time)
+            elapsed = time.time() - cycle_start
+            sleep_time = max(0, Config.SCAN_INTERVAL - elapsed)
+            log.info(f"Cycle done in {elapsed:.1f}s, sleeping {sleep_time:.0f}s")
+            time.sleep(sleep_time)
+        except KeyboardInterrupt:
+            log.info("Bot dihentikan oleh user.")
+            sys.exit(0)
+        except Exception as e:
+            log.error(f"[MAIN LOOP] Unexpected error: {e}", exc_info=True)
+            log.info("Restart cycle dalam 60 detik...")
+            time.sleep(60)
+
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        log.info("Bot dihentikan.")
+        sys.exit(0)
+    except Exception as e:
+        log.critical(f"Bot crash fatal: {e}", exc_info=True)
+        sys.exit(1)
 
 
 def _process_symbol(

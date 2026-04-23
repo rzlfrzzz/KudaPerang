@@ -3,6 +3,8 @@ telegram_notifier.py — Kirim sinyal trading ke Telegram
 Format pesan rapi dan mudah dibaca di HP
 """
 
+from __future__ import annotations
+
 import logging
 import requests
 from datetime import datetime
