@@ -1,0 +1,19 @@
+# Config (jangan sampai token kepublish)
+config.py
+
+# File contoh integrasi (bukan bagian dari bot)
+integration_example.py
+
+# Log
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# VS
+.vs/
