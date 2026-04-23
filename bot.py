@@ -46,7 +46,7 @@ log = logging.getLogger(__name__)
 
 def main():
     log.info("=" * 60)
-    log.info("  MTF Signal Bot started")
+    log.info("  KUDA PERANG SEDANG BERLARI! YIHAAAA")
     log.info(f"  HTF/MTF/LTF : {Config.HTF}/{Config.MTF}/{Config.LTF}")
     log.info("=" * 60)
 
@@ -55,7 +55,7 @@ def main():
     analyzer = DeepSeekAnalyzer()
 
     notifier.send_text(
-        f"\u2705 MTF Signal Bot started\n"
+        f"\u2705 KUDA PERANG SEDANG BERLARI! YIHAAAA\n"
         f"HTF/MTF/LTF: {Config.HTF}/{Config.MTF}/{Config.LTF}\n"
         f"Scan interval: {Config.SCAN_INTERVAL}s"
     )
