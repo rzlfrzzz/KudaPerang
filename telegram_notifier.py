@@ -17,19 +17,17 @@ _MDV2_CHARS = r"\_*[]()~`>#+-=|{}.!"
 
 # Emoji helper
 EMOJI = {
-    "LONG":     "🟢",
-    "SHORT":    "🔴",
-    "bullish":  "📈",
-    "bearish":  "📉",
-    "golden_zone":  "⭐",
-    "deep_zone":    "🔵",
-    "shallow_zone": "🟡",
+    "LONG":  "🟢",
+    "SHORT": "🔴",
+    "bullish": "📈",
+    "bearish": "📉",
 }
 
 FIB_ZONE_LABEL = {
     "golden_zone":  "Golden Zone (38.2%–61.8%)",
     "deep_zone":    "Deep Zone (61.8%–78.6%)",
     "shallow_zone": "Shallow Zone (23.6%–38.2%)",
+    "n/a":          "—",
 }
 
 
@@ -59,17 +57,17 @@ class TelegramNotifier:
     @staticmethod
     def _format_message(s: dict, ai_commentary: str | None = None) -> str:
         dir_emoji  = EMOJI.get(s["direction"], "")
-        div_emoji  = EMOJI.get(s["divergence"], "")
-        zone_emoji = EMOJI.get(s["fib_zone"], "")
-        zone_label = _esc(FIB_ZONE_LABEL.get(s["fib_zone"], s["fib_zone"]))
+        bias_emoji = EMOJI.get(s["htf_bias"], "")
+        zone_label = _esc(FIB_ZONE_LABEL.get(s.get("fib_zone", "n/a"), s.get("fib_zone", "—")))
         now        = _esc(datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC"))
 
         direction  = _esc(s["direction"])
         symbol     = _esc(s["symbol"])
         htf_bias   = _esc(s["htf_bias"].upper())
         mtf_bias   = _esc(s["mtf_bias"].upper())
-        divergence = _esc(s["divergence"].upper())
         rsi        = _esc(str(s["rsi"]))
+        adx        = _esc(str(s.get("adx", "—")))
+        chop       = _esc(str(s.get("choppiness", "—")))
         entry      = _esc(str(s["entry"]))
         stop_loss  = _esc(str(s["stop_loss"]))
         tp1        = _esc(str(s["tp1"]))
@@ -89,10 +87,13 @@ class TelegramNotifier:
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"📊 *ANALISIS KONFIRMASI*\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• HTF \\(1H\\) Bias  : {htf_bias} {div_emoji}\n"
-            f"• MTF \\(15M\\) Bias : {mtf_bias} {div_emoji}\n"
-            f"• RSI Divergence : {divergence} \\(RSI: {rsi}\\)\n"
-            f"• Fib Zone       : {zone_emoji} {zone_label}\n"
+            f"• HTF \\(1H\\) Bias  : {htf_bias} {bias_emoji}\n"
+            f"• MTF \\(15M\\) Bias : {mtf_bias} {bias_emoji}\n"
+            f"• MACD Crossover : LTF ✅\n"
+            f"• ADX            : {adx} 💪\n"
+            f"• RSI            : {rsi}\n"
+            f"• Choppiness CI  : {chop}\n"
+            f"• Fib Reference  : {zone_label}\n"
             f"\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"🎯 *LEVEL TRADING*\n"

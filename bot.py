@@ -56,6 +56,7 @@ def main():
 
     notifier.send_text(
         f"\u2705 KUDA PERANG SEDANG BERLARI! YIHAAAA\n"
+        f"Strategi: MACD Crossover + ADX + RSI + Candle Strength + Anti-Choppy\n"
         f"HTF/MTF/LTF: {Config.HTF}/{Config.MTF}/{Config.LTF}\n"
         f"Scan interval: {Config.SCAN_INTERVAL}s"
     )
@@ -124,11 +125,14 @@ def _process_symbol(
         return
 
     # 2. Hitung indikator
-    df_htf = Indicators.add_ema(df_htf)
-    df_mtf = Indicators.add_ema(df_mtf)
-    df_ltf = Indicators.add_ema(df_ltf)
+    df_htf = Indicators.add_macd(df_htf)
+    df_mtf = Indicators.add_macd(df_mtf)
+    df_ltf = Indicators.add_macd(df_ltf)
+    df_ltf = Indicators.add_adx(df_ltf)
     df_ltf = Indicators.add_rsi(df_ltf)
     df_ltf = Indicators.add_fibonacci(df_ltf)
+    df_ltf = Indicators.add_candle_strength(df_ltf)
+    df_ltf = Indicators.add_choppiness(df_ltf)
 
     # 3. Jalankan engine sinyal
     signal = SignalEngine.evaluate(symbol, df_htf, df_mtf, df_ltf)

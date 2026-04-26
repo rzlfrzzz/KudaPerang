@@ -59,6 +59,24 @@ class Config:
     RSI_OVERBOUGHT = 70
     FIB_LOOKBACK   = 100
 
+    # MACD settings
+    MACD_FAST   = 12
+    MACD_SLOW   = 26
+    MACD_SIGNAL = 9
+
+    # ADX: minimum nilai untuk konfirmasi trend kuat
+    ADX_PERIOD = 14
+    ADX_MIN    = 25
+
+    # Candle strength: minimum rasio body vs range (0.0–1.0)
+    CANDLE_BODY_MIN = 0.5
+
+    # Choppiness Index: pasar dianggap choppy jika CI >= threshold
+    # Range teoritis: ~18.2 (trending kuat) – 100 (pure chop)
+    # Nilai default 61.8 (golden ratio) adalah batas yang umum dipakai
+    CHOP_PERIOD    = 14
+    CHOP_THRESHOLD = 61.8
+
     # ── Timing ───────────────────────────────────────────────────────────────
     SCAN_INTERVAL  = 300
     REQUEST_DELAY  = 0.3

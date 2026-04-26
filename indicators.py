@@ -1,6 +1,6 @@
 """
 indicators.py — Kalkulasi semua indikator teknikal
-EMA, RSI, Fibonacci Retracement levels
+EMA, RSI, MACD, ADX, Fibonacci Retracement levels, Candle Strength, Choppiness Index
 """
 
 import pandas as pd
@@ -155,3 +155,136 @@ class Indicators:
                 return "shallow_zone"  # 23.6%–38.2% — retrace dangkal ke resistance
 
         return None
+
+    @staticmethod
+    def add_macd(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Hitung MACD: macd_line, signal_line, histogram.
+
+        Kolom yang ditambahkan:
+          macd_line    — EMA(fast) - EMA(slow)
+          macd_signal  — EMA(macd_line, signal_period)
+          macd_hist    — macd_line - macd_signal
+          macd_cross   — "bullish" | "bearish" | None  (crossover pada candle terakhir)
+        """
+        df = df.copy()
+        fast   = getattr(Config, "MACD_FAST", 12)
+        slow   = getattr(Config, "MACD_SLOW", 26)
+        signal = getattr(Config, "MACD_SIGNAL", 9)
+
+        ema_fast = df["close"].ewm(span=fast, adjust=False).mean()
+        ema_slow = df["close"].ewm(span=slow, adjust=False).mean()
+
+        df["macd_line"]   = ema_fast - ema_slow
+        df["macd_signal"] = df["macd_line"].ewm(span=signal, adjust=False).mean()
+        df["macd_hist"]   = df["macd_line"] - df["macd_signal"]
+
+        # Deteksi crossover: bandingkan candle terakhir vs sebelumnya
+        prev_hist = df["macd_hist"].iloc[-2] if len(df) > 1 else 0
+        curr_hist = df["macd_hist"].iloc[-1]
+
+        if prev_hist < 0 and curr_hist >= 0:
+            df["macd_cross"] = "bullish"
+        elif prev_hist > 0 and curr_hist <= 0:
+            df["macd_cross"] = "bearish"
+        else:
+            df["macd_cross"] = None
+
+        return df
+
+    @staticmethod
+    def add_adx(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Hitung Average Directional Index (ADX) beserta +DI dan -DI.
+
+        Kolom yang ditambahkan: adx, plus_di, minus_di
+        """
+        df = df.copy()
+        period = getattr(Config, "ADX_PERIOD", 14)
+
+        high  = df["high"]
+        low   = df["low"]
+        close = df["close"]
+
+        # True Range
+        tr1 = high - low
+        tr2 = (high - close.shift(1)).abs()
+        tr3 = (low  - close.shift(1)).abs()
+        tr  = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+        # Directional Movement
+        up_move   = high - high.shift(1)
+        down_move = low.shift(1) - low
+
+        plus_dm  = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+        minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+        plus_dm_s  = pd.Series(plus_dm,  index=df.index)
+        minus_dm_s = pd.Series(minus_dm, index=df.index)
+
+        # Wilder smoothing
+        atr        = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+        plus_di_s  = 100 * plus_dm_s.ewm(alpha=1 / period, min_periods=period, adjust=False).mean() / atr.replace(0, np.nan)
+        minus_di_s = 100 * minus_dm_s.ewm(alpha=1 / period, min_periods=period, adjust=False).mean() / atr.replace(0, np.nan)
+
+        dx    = 100 * (plus_di_s - minus_di_s).abs() / (plus_di_s + minus_di_s).replace(0, np.nan)
+        adx_s = dx.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+
+        df["adx"]      = adx_s.fillna(0)
+        df["plus_di"]  = plus_di_s.fillna(0)
+        df["minus_di"] = minus_di_s.fillna(0)
+        return df
+
+    @staticmethod
+    def add_candle_strength(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Analisis kekuatan candle terakhir.
+
+        Kolom yang ditambahkan:
+          candle_body_pct — rasio body vs total range (0–1)
+          candle_dir      — "bull" | "bear"
+          candle_strong   — True jika body >= CANDLE_BODY_MIN dari total range
+        """
+        df = df.copy()
+        body_min = getattr(Config, "CANDLE_BODY_MIN", 0.5)
+
+        body = (df["close"] - df["open"]).abs()
+        rng  = (df["high"] - df["low"]).replace(0, np.nan)
+
+        df["candle_body_pct"] = (body / rng).fillna(0)
+        df["candle_dir"]      = np.where(df["close"] >= df["open"], "bull", "bear")
+        df["candle_strong"]   = df["candle_body_pct"] >= body_min
+        return df
+
+    @staticmethod
+    def add_choppiness(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Hitung Choppiness Index.
+        Nilai mendekati 100 = choppy (ranging), mendekati 0 = trending kuat.
+        Pasar dianggap choppy jika CI >= CHOP_THRESHOLD (default 61.8).
+
+        Kolom yang ditambahkan: choppiness, is_choppy
+        """
+        df = df.copy()
+        period    = getattr(Config, "CHOP_PERIOD", 14)
+        threshold = getattr(Config, "CHOP_THRESHOLD", 61.8)
+
+        high  = df["high"]
+        low   = df["low"]
+        close = df["close"]
+
+        # True Range per candle
+        tr1 = high - low
+        tr2 = (high - close.shift(1)).abs()
+        tr3 = (low  - close.shift(1)).abs()
+        tr  = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+        atr_sum   = tr.rolling(window=period).sum()
+        high_roll = high.rolling(window=period).max()
+        low_roll  = low.rolling(window=period).min()
+        rng_roll  = (high_roll - low_roll).replace(0, np.nan)
+
+        ci = 100 * np.log10(atr_sum / rng_roll) / np.log10(period)
+        df["choppiness"] = ci.fillna(50)
+        df["is_choppy"]  = df["choppiness"] >= threshold
+        return df
